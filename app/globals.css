@@ -26,12 +26,18 @@ body,
   text-decoration: none;
 }
 
-p {
+p.descriptive {
   text-indent: 1em;
+  margin: 0;
+}
+
+p.conversation {
   margin: 0;
 }
 
 h4 {
   text-indent: 1em;
-  margin-left: 1em;
+  padding-right: 1em;
+  padding-left: 1em;
+  margin: 0;
 }

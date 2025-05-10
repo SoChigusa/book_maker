@@ -1,4 +1,5 @@
 // pages/index.tsx
+import React, { useRef, useState, useEffect } from 'react';
 import Head from 'next/head';
 import { Pager } from '../components/Pager';
 import chapters from '../chapters.json';
@@ -41,39 +42,102 @@ interface NovelProps {
 }
 
 export default function Novel({ chapters }: NovelProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const paraRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const [padMap, setPadMap] = useState<Record<string, number>>({});
+
+  const PAGE_WIDTH = 450;
+
+  // After mount, compute positions and mark paragraphs at page boundaries, and compute right padding
+  useEffect(() => {
+    if (!paraRefs.current['0_title']) return;
+    const baseline = paraRefs.current['0_title'].offsetLeft + paraRefs.current['0_title'].offsetWidth;
+    const newPadMap: Record<string, number> = {};
+    let cumulativePad = 0;
+    Object.entries(paraRefs.current).forEach(([key, el]) => {
+      if (!el) return;
+      if (key === '0_title') return;
+      const originalRight = el.offsetLeft + el.offsetWidth;
+      const relative = baseline - (originalRight - cumulativePad);
+      const mod = relative % PAGE_WIDTH;
+      if (mod + el.offsetWidth > PAGE_WIDTH || key.includes('_title')) {
+        const pad = PAGE_WIDTH - mod;
+        newPadMap[key] = pad;
+        cumulativePad += pad;
+      }
+    });
+    setPadMap(newPadMap);
+  }, [chapters]);
+
   return (
     <>
       <Head>
         <title>縦書き小説</title>
-        <link rel="stylesheet" href="/styles/globals.css" />
       </Head>
 
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        width: '100%',
-        height: '100%',
-      }}>
-        <Pager pageHeight={600} pageWidth={450} overlap={30}>
-          {chapters.map((chapter, idx) => (
-            <div key={idx}>
-              <h4>{chapter.chapterTitle}</h4>
-              {chapter.chapterContents.flatMap((content, i) => [
-                ...content.split('\n').map((line, index) => (
-                  <div key={`${i}_${index}`}>
-                    <p dangerouslySetInnerHTML={{ __html: line }} />
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          width: '100%',
+          height: '100%',
+        }}
+      >
+        <div ref={containerRef}>
+          <Pager pageHeight={600} pageWidth={PAGE_WIDTH} overlap={0}>
+            {chapters.map((chapter, idx) => {
+              const keyNameTitle = `${idx}_title`;
+              return (
+                <div key={idx}>
+                  <div
+                    ref={(el) => {
+                      paraRefs.current[keyNameTitle] = el;
+                    }}
+                    style={{
+                      paddingRight: padMap[keyNameTitle] !== undefined ? `${padMap[keyNameTitle]}px` : undefined,
+                    }}
+                  >
+                    <h4>{chapter.chapterTitle}</h4>
                   </div>
-                )),
-                i < chapter.chapterContents.length - 1 && (
-                  <p key={`${i}_sep`} style={{ textAlign: 'center' }}>
-                    ＊＊＊
-                  </p>
-                ),
-              ])}
-            </div>
-          ))}
-        </Pager>
+                  {chapter.chapterContents.flatMap((content, i) =>
+                    [
+                      ...content.split('\n').map((line, index) => {
+                        const keyName = `${idx}_${i}_${index}`;
+                        return (
+                          <div
+                            key={keyName}
+                            ref={(el) => {
+                              paraRefs.current[keyName] = el;
+                            }}
+                            style={{
+                              // backgroundColor: highlighted.has(keyName)
+                              //   ? 'rgba(255,230,230,0.7)'
+                              //   : undefined,
+                              paddingRight: padMap[keyName] !== undefined ? `${padMap[keyName]}px` : undefined,
+                            }}
+                          >
+                            <p
+                              className={line.trim().startsWith('「') ? 'conversation' : 'descriptive'}
+                              dangerouslySetInnerHTML={{ __html: line }}
+                            />
+                          </div>
+                        );
+                      }),
+                      i < chapter.chapterContents.length - 1 && (
+                        <p
+                          key={`${i}_sep`}
+                          style={{ textAlign: 'center', paddingRight: '1em', paddingLeft: '1em' }}>
+                          ＊＊＊
+                        </p>
+                      ),
+                    ].filter(Boolean)
+                  )}
+                </div>
+              )
+            })}
+          </Pager>
+        </div>
       </div>
     </>
   );

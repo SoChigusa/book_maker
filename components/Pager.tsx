@@ -50,7 +50,11 @@ export function Pager({ children, pageWidth, pageHeight, overlap }: PagerProps) 
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onClick={handleZoneClick}
-      style={{ position: 'relative', display: 'inline-block', cursor: 'pointer' }}
+      style={{
+        position: 'relative',
+        display: 'inline-block',
+        cursor: 'pointer',
+      }}
     >
       {/* Hover overlays */}
       <div
@@ -80,10 +84,11 @@ export function Pager({ children, pageWidth, pageHeight, overlap }: PagerProps) 
       <div style={{
         position: 'relative',
         width: pageWidth,
-        height: pageHeight,
+        height: pageHeight + 14,
         overflow: 'hidden',
-        padding: '3px',
+        padding: '7px 3px',
         zIndex: 0,
+        boxSizing: 'border-box',
         border: '2px solid #666',
       }}>
         <div
