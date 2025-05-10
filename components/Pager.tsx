@@ -44,7 +44,7 @@ export function Pager({ children, pageWidth, pageHeight, overlap }: PagerProps) 
 
   return (
     <div
-      id='novel-window'
+      className='novel-window'
       ref={containerRef}
       onMouseEnter={handleMouseMove}
       onMouseMove={handleMouseMove}

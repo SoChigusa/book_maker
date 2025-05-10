@@ -1,6 +1,6 @@
 // pages/index.tsx
 import Head from 'next/head';
-import { Pager } from '../components/Pager';  // ①Pagerをインポート
+import { Pager } from '../components/Pager';
 import chapters from '../chapters.json';
 import fs from 'fs';
 import path from 'path';
@@ -15,9 +15,15 @@ export const getStaticProps = async (): Promise<{
     const chapterContents = chapter.chapterContents.map((file) => {
       const filePath = path.join(process.cwd(), file);
       try {
-        return '　' + fs.readFileSync(filePath, 'utf-8');
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        const sanitized = raw
+          .replace(/…/g, '︙')
+          .replace(/\.{3}/g, '︙')
+          .replace(/――/g, '\u2500\u2500')
+          .replace(/\[([^\]]+)\]\{([^\}]+)\}/g, '<ruby>$1<rt>$2</rt></ruby>');
+        return sanitized;
       } catch {
-        return '　ファイルが見つかりません';
+        return 'ファイルが見つかりません。';
       }
     });
     return { ...chapter, chapterContents };
@@ -39,19 +45,7 @@ export default function Novel({ chapters }: NovelProps) {
     <>
       <Head>
         <title>縦書き小説</title>
-        <style>{`
-          html, body, #__next {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-          }
-          #novel-window {
-            writing-mode: vertical-rl;
-            font-size: 18px;
-            line-height: 1.5;
-            font-family: '游明朝体', 'Noto Serif JP', serif;
-          }
-        `}</style>
+        <link rel="stylesheet" href="/styles/globals.css" />
       </Head>
 
       <div style={{
@@ -64,14 +58,13 @@ export default function Novel({ chapters }: NovelProps) {
         <Pager pageHeight={600} pageWidth={450} overlap={30}>
           {chapters.map((chapter, idx) => (
             <div key={idx}>
-              <b>　{chapter.chapterTitle}</b>
+              <h4>{chapter.chapterTitle}</h4>
               {chapter.chapterContents.flatMap((content, i) => [
-                <p
-                  key={i}
-                  dangerouslySetInnerHTML={{
-                    __html: content.replace(/\n/g, '<br>　'),
-                  }}
-                />,
+                ...content.split('\n').map((line, index) => (
+                  <div key={`${i}_${index}`}>
+                    <p dangerouslySetInnerHTML={{ __html: line }} />
+                  </div>
+                )),
                 i < chapter.chapterContents.length - 1 && (
                   <p key={`${i}_sep`} style={{ textAlign: 'center' }}>
                     ＊＊＊
