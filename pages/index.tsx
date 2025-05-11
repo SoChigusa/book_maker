@@ -4,7 +4,6 @@ import chapters from '../chapters.json';
 import fs from 'fs';
 import path from 'path';
 import type Chapter from '../app/types';
-import { useRouter } from 'next/router';
 
 export const getStaticProps = async (): Promise<{
   props: {
@@ -41,7 +40,6 @@ interface NovelProps {
 }
 
 export default function Novel({ chapters }: NovelProps) {
-  const router = useRouter();
 
 
   return (
@@ -63,7 +61,7 @@ export default function Novel({ chapters }: NovelProps) {
           pageHeight={600}
           pageWidth={480}
           paddingX={7}
-          defaultFontSize={18}
+          defaultFontSize={16}
           chapters={chapters}
         />
       </div>

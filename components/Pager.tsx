@@ -17,6 +17,7 @@ export function Pager({ pageWidth, pageHeight, paddingX, defaultFontSize, chapte
   const paraRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const [pageCount, setPageCount] = useState(1);
   const [hoverZone, setHoverZone] = useState<'left' | 'right' | null>(null);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
 
   // page number from query
   const pageParam = Array.isArray(router.query.page) ? router.query.page[0] : router.query.page;
@@ -32,7 +33,7 @@ export function Pager({ pageWidth, pageHeight, paddingX, defaultFontSize, chapte
   const fontSize = isNaN(parsedFont) ? defaultFontSize : parsedFont;
 
   // padding adjustment
-  useEffect(() => {
+  useLayoutEffect(() => {
     Object.values(paraRefs.current).forEach(el => {
       if (el) {
         el.style.paddingRight = '';
@@ -53,7 +54,7 @@ export function Pager({ pageWidth, pageHeight, paddingX, defaultFontSize, chapte
         cumulativePad += pad;
       }
     });
-  }, [chapters, fontSize]);
+  }, [chapters, fontSize, paddingX, pageWidth]);
 
   // page count adjustment
   useLayoutEffect(() => {
@@ -61,6 +62,24 @@ export function Pager({ pageWidth, pageHeight, paddingX, defaultFontSize, chapte
     const totalW = innerRef.current.scrollWidth;
     setPageCount(Math.ceil(totalW / pageWidth));
   }, [chapters, pageWidth, fontSize]);
+
+  // jump after font-size change
+  useEffect(() => {
+    if (!pendingKey) return;
+    if (!paraRefs.current['0_title']) return;
+    const baseline = paraRefs.current['0_title'].offsetLeft + paraRefs.current['0_title'].offsetWidth;
+    const el = paraRefs.current[pendingKey];
+    if (el) {
+      const elRight = el.offsetLeft + el.offsetWidth;
+      const newPage = Math.floor((baseline - elRight) / pageWidth) + 1;
+      router.push(
+        { pathname: router.pathname, query: { ...router.query, page: newPage } },
+        undefined,
+        { shallow: true }
+      );
+    }
+    setPendingKey(null);
+  }, [fontSize]);
 
   const goNext = () => {
     if (pageIndex < pageCount - 1) {
@@ -95,6 +114,16 @@ export function Pager({ pageWidth, pageHeight, paddingX, defaultFontSize, chapte
   };
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (paraRefs.current['0_title']) {
+      const baseline = paraRefs.current['0_title'].offsetLeft + paraRefs.current['0_title'].offsetWidth;
+      const entries = Object.entries(paraRefs.current)
+        .filter(([, el]) => el !== null);
+      const firstOnPage = entries
+        .map(([key, el]) => ({ key, right: el!.offsetLeft + el!.offsetWidth }))
+        .filter(item => item.right <= baseline - pageIndex * pageWidth)
+        .sort((a, b) => b.right - a.right)[0];
+      setPendingKey(firstOnPage ? firstOnPage.key : null);
+    }
     const newFontSize = parseInt(e.target.value, 10);
     router.push(
       { pathname: router.pathname, query: { ...router.query, fontSize: newFontSize } },
@@ -182,19 +211,30 @@ export function Pager({ pageWidth, pageHeight, paddingX, defaultFontSize, chapte
                   [
                     ...content.split('\n').map((line, index) => {
                       const keyName = `${idx}_${i}_${index}`;
-                      return (
-                        <div
-                          key={keyName}
-                          ref={(el) => {
-                            paraRefs.current[keyName] = el;
-                          }}
-                        >
-                          <p
-                            className={line.trim().startsWith('「') ? 'conversation' : 'descriptive'}
-                            dangerouslySetInnerHTML={{ __html: line }}
-                          />
-                        </div>
-                      );
+                      if (line == '') {
+                        return (
+                          <div
+                            key={keyName}
+                            ref={(el) => {
+                              paraRefs.current[keyName] = el;
+                            }}
+                          ><br /></div>
+                        );
+                      } else {
+                        return (
+                          <div
+                            key={keyName}
+                            ref={(el) => {
+                              paraRefs.current[keyName] = el;
+                            }}
+                          >
+                            <p
+                              className={line.trim().startsWith('「') ? 'conversation' : 'descriptive'}
+                              dangerouslySetInnerHTML={{ __html: line }}
+                            />
+                          </div>
+                        );
+                      }
                     }),
                     i < chapter.chapterContents.length - 1 && (
                       <p
