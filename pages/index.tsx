@@ -6,6 +6,7 @@ import chapters from '../chapters.json';
 import fs from 'fs';
 import path from 'path';
 import type Chapter from '../app/types';
+import { useRouter } from 'next/router';
 
 export const getStaticProps = async (): Promise<{
   props: {
@@ -44,15 +45,25 @@ interface NovelProps {
 export default function Novel({ chapters }: NovelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const paraRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
-  const [padMap, setPadMap] = useState<Record<string, number>>({});
 
-  const PAGE_WIDTH = 450;
+  const PAGE_WIDTH = 480;
+  const PADDING_X = 5;
+  const router = useRouter();
+  const fontParam = Array.isArray(router.query.fontSize)
+    ? router.query.fontSize[0]
+    : router.query.fontSize;
+  const parsedFont = parseInt(fontParam || '', 10);
+  const fontSize = isNaN(parsedFont) ? 18 : parsedFont;
 
   // After mount, compute positions and mark paragraphs at page boundaries, and compute right padding
   useEffect(() => {
+    Object.values(paraRefs.current).forEach(el => {
+      if (el) {
+        el.style.paddingRight = '';
+      }
+    });
     if (!paraRefs.current['0_title']) return;
     const baseline = paraRefs.current['0_title'].offsetLeft + paraRefs.current['0_title'].offsetWidth;
-    const newPadMap: Record<string, number> = {};
     let cumulativePad = 0;
     Object.entries(paraRefs.current).forEach(([key, el]) => {
       if (!el) return;
@@ -60,14 +71,13 @@ export default function Novel({ chapters }: NovelProps) {
       const originalRight = el.offsetLeft + el.offsetWidth;
       const relative = baseline - (originalRight - cumulativePad);
       const mod = relative % PAGE_WIDTH;
-      if (mod + el.offsetWidth > PAGE_WIDTH || key.includes('_title')) {
-        const pad = PAGE_WIDTH - mod;
-        newPadMap[key] = pad;
+      if (mod + el.offsetWidth > PAGE_WIDTH - PADDING_X || key.includes('_title')) {
+        const pad = PAGE_WIDTH + PADDING_X - mod;
+        el.style.paddingRight = `${pad}px`;
         cumulativePad += pad;
       }
     });
-    setPadMap(newPadMap);
-  }, [chapters]);
+  }, [chapters, fontSize]);
 
   return (
     <>
@@ -85,7 +95,19 @@ export default function Novel({ chapters }: NovelProps) {
         }}
       >
         <div ref={containerRef}>
-          <Pager pageHeight={600} pageWidth={PAGE_WIDTH} overlap={0}>
+          <Pager
+            pageHeight={600}
+            pageWidth={PAGE_WIDTH}
+            overlap={0}
+            fontSize={fontSize}
+            onFontSizeChange={(newFontSize) => {
+              router.push(
+                { pathname: router.pathname, query: { ...router.query, fontSize: newFontSize } },
+                undefined,
+                { shallow: true }
+              );
+            }}
+          >
             {chapters.map((chapter, idx) => {
               const keyNameTitle = `${idx}_title`;
               return (
@@ -93,9 +115,6 @@ export default function Novel({ chapters }: NovelProps) {
                   <div
                     ref={(el) => {
                       paraRefs.current[keyNameTitle] = el;
-                    }}
-                    style={{
-                      paddingRight: padMap[keyNameTitle] !== undefined ? `${padMap[keyNameTitle]}px` : undefined,
                     }}
                   >
                     <h4>{chapter.chapterTitle}</h4>
@@ -109,12 +128,6 @@ export default function Novel({ chapters }: NovelProps) {
                             key={keyName}
                             ref={(el) => {
                               paraRefs.current[keyName] = el;
-                            }}
-                            style={{
-                              // backgroundColor: highlighted.has(keyName)
-                              //   ? 'rgba(255,230,230,0.7)'
-                              //   : undefined,
-                              paddingRight: padMap[keyName] !== undefined ? `${padMap[keyName]}px` : undefined,
                             }}
                           >
                             <p

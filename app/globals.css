@@ -9,7 +9,6 @@ body,
 .novel-window {
   writing-mode: vertical-rl;
   text-orientation: upright;
-  font-size: 18px;
   line-height: 1.5;
   font-family: '游明朝体', 'Noto Serif JP', serif;
   word-break: break-all;
