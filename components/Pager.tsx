@@ -229,7 +229,7 @@ export function Pager({ pageWidth, pageHeight, paddingX, defaultFontSize, chapte
                             }}
                           >
                             <p
-                              className={line.trim().startsWith('「') ? 'conversation' : 'descriptive'}
+                              className={/^[「（]/.test(line.trim()) ? 'conversation' : 'descriptive'}
                               dangerouslySetInnerHTML={{ __html: line }}
                             />
                           </div>

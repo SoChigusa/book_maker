@@ -16,9 +16,12 @@ export const getStaticProps = async (): Promise<{
       try {
         const raw = fs.readFileSync(filePath, 'utf-8');
         const sanitized = raw
-          .replace(/…/g, '︙')
-          .replace(/\.{3}/g, '︙')
+          // .replace(/…/g, '︙')
+          // .replace(/\.{3}/g, '︙')
           .replace(/――/g, '\u2500\u2500')
+          .replace(/“/g, '\u301D')
+          .replace(/”/g, '\u301F')
+          .replace(/([A-Za-z])/g, '<span class="alphabet">$1</span>')
           .replace(/\[([^\]]+)\]\{([^\}]+)\}/g, '<ruby>$1<rt>$2</rt></ruby>');
         return sanitized;
       } catch {
