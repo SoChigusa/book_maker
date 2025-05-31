@@ -1,0 +1,16 @@
+[
+  {
+    "chapterTitle": "沈黙の粒子",
+    "chapterContents": [
+      "text/SK.txt"
+    ]
+  },
+  {
+    "chapterTitle": "象の卵を追え！",
+    "chapterContents": [
+      "text/egg1.txt",
+      "text/egg2.txt",
+      "text/egg3.txt"
+    ]
+  }
+]

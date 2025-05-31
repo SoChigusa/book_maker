@@ -48,7 +48,7 @@ export default function Novel({ chapters }: NovelProps) {
   return (
     <>
       <Head>
-        <title>縦書き小説</title>
+        <title>縦書き小説ビューワー</title>
       </Head>
 
       <div
