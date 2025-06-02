@@ -1,126 +1,44 @@
 import React, { useRef, useState, useLayoutEffect, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Chapter from '@/app/types';
+import { extractPagesFromRefs, generateAllFontCaches, getCache } from '@/utils/pagerCache';
 
 type PagerProps = {
   pageHeight: number;
   pageWidth: number;
   padding: number;
   defaultFontSize: number;
+  fontSizeList: number[];
   chapters: Chapter[];
 };
 
-// ────────────────────────────────────────────────────────────
-// ユーティリティ関数：paraRefs／ページ幅／chapters から
-// 「ページごとの HTML 文字列リスト」を返す。
-//────────────────────────────────────────────────────────────
-export function extractPagesFromRefs(
-  paraRefs: React.MutableRefObject<{ [key: string]: HTMLDivElement | null }>,
-  chapters: Chapter[],
-  pageWidth: number,
-  setPageCount: React.Dispatch<React.SetStateAction<number>>
-): string[] {
-  type ItemPos = { key: string; page: number; el: HTMLDivElement };
 
-  const allRefs = paraRefs.current;
 
-  // 1) まず「0_title」が存在しなければ空の array を返す
-  const titleEl0 = allRefs['0_title'];
-  if (!titleEl0) {
-    return [];
-  }
-
-  // 2) baseline を取得 ("0_title" の右端位置)
-  const baseline = titleEl0.offsetLeft + titleEl0.offsetWidth;
-
-  // 3) 各要素を「章→段落→行」の順序で並べる
-  const processingOrder: { key: string; el: HTMLDivElement }[] = [];
-  chapters.forEach((chapter, chapIdx) => {
-    // 章タイトル
-    const titleKey = `${chapIdx}_title`;
-    const titleEl = allRefs[titleKey];
-    if (titleEl) {
-      processingOrder.push({ key: titleKey, el: titleEl });
-    }
-
-    // 本文行
-    chapter.chapterContents.forEach((paraText, paraIdx) => {
-      paraText.split('\n').forEach((_, lineIdx) => {
-        const lineKey = `${chapIdx}_${paraIdx}_${lineIdx}`;
-        const lineEl = allRefs[lineKey];
-        if (lineEl) {
-          processingOrder.push({ key: lineKey, el: lineEl });
-        }
-      });
-      const sepKey = `${chapIdx}_${paraIdx}_sep`;
-      const sepEl = allRefs[sepKey];
-      if (sepEl) processingOrder.push({ key: sepKey, el: sepEl });
-    });
-  });
-
-  // 4) パディング調整をシミュレートしつつ、ページ番号を決める
-  let cumulativePad = 0;
-  const itemPositions: ItemPos[] = [];
-  let maxPage = 0;
-
-  processingOrder.forEach(({ key, el }) => {
-    const originalRight = el.offsetLeft + el.offsetWidth;
-    const relative = baseline - (originalRight - cumulativePad);
-    const mod = relative % pageWidth;
-
-    // タイトル行は改ページ、または 「折り返しオーバー」なら改ページ
-    const isNotFirstTitle = key.includes('_title') && key !== '0_title';
-    if (mod + el.offsetWidth > pageWidth || isNotFirstTitle) {
-      const pad = pageWidth - mod;
-      cumulativePad += pad;
-      // （計算上だけ pad を加え、DOM の style.paddingRight はいじらない）
-    }
-
-    const effectiveRight = originalRight - cumulativePad;
-    const page = Math.floor((baseline - effectiveRight) / pageWidth);
-    if (page > maxPage) {
-      maxPage = page;
-    }
-    itemPositions.push({ key, page, el });
-  });
-
-  const pageCount = maxPage + 1;
-  setPageCount(pageCount);
-
-  // 5) pageCount 要素の配列を作り、各 page に対応する outerHTML を結合する
-  const pages: string[] = Array(pageCount).fill('').map(() => '');
-
-  itemPositions.forEach(({ page, el }) => {
-    pages[page] += el.outerHTML;
-  });
-
-  return pages;
-}
-
-export function Pager({ pageWidth, pageHeight, padding, defaultFontSize, chapters }: PagerProps) {
+export function Pager({ pageWidth, pageHeight, padding, defaultFontSize, fontSizeList, chapters }: PagerProps) {
   const router = useRouter();
   const innerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const paraRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const [pageCount, setPageCount] = useState(1);
   const [hoverZone, setHoverZone] = useState<'left' | 'right' | null>(null);
-  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [fingerprint, setFingerprint] = useState<string | null>(null);
   const [animOffset, setAnimOffset] = useState<number>(pageWidth + 2 * padding);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
+  const [fontSize, setFontSize] = useState<number>(defaultFontSize);
 
   // page number from query
   const pageParam = Array.isArray(router.query.page) ? router.query.page[0] : router.query.page;
   const parsed = parseInt(pageParam || '', 10);
-  let pageIndex = isNaN(parsed) ? 0 : parsed - 1;
-  pageIndex = Math.max(0, Math.min(pageIndex, pageCount - 1));
   const hasPageQuery = !isNaN(parsed);
+  let pageIndex = hasPageQuery ? parsed - 1 : 0;
+  pageIndex = Math.max(0, Math.min(pageIndex, pageCount - 1));
 
   // font size from query
-  const fontParam = Array.isArray(router.query.fontSize)
-    ? router.query.fontSize[0]
-    : router.query.fontSize;
-  const parsedFont = parseInt(fontParam || '', 10);
-  const fontSize = isNaN(parsedFont) ? defaultFontSize : parsedFont;
+  // const fontParam = Array.isArray(router.query.fontSize)
+  //   ? router.query.fontSize[0]
+  //   : router.query.fontSize;
+  // const parsedFont = parseInt(fontParam || '', 10);
+  // setFontSize(isNaN(parsedFont) ? defaultFontSize : parsedFont);
 
   // ──────────────────────────────────────────────────────────
   // 「測定用コンテナ」を描画する（ユーザーには見せない）
@@ -177,14 +95,17 @@ export function Pager({ pageWidth, pageHeight, padding, defaultFontSize, chapter
   // ──────────────────────────────────────────────────────────
   // キャッシュキーの作成 (chapters + pageWidth + paddingX + fontSize を文字列化したものをキーにする例)
   //──────────────────────────────────────────────────────────
-  const cacheKey = React.useMemo(() => {
-    // 章コンテンツが大きい場合はハッシュ化するのが本来望ましいが、
-    // サンプルとして簡易に JSON.stringify を使う
-    const chaptersJson = JSON.stringify(
-      chapters.map((ch) => ({ title: ch.chapterTitle, contents: ch.chapterContents }))
-    );
-    return `pagerCache:${chaptersJson}:${pageWidth}:${padding}:${fontSize}`;
-  }, [chapters, pageWidth, padding, fontSize]);
+  // 章コンテンツが大きい場合はハッシュ化するのが本来望ましいが、
+  // サンプルとして簡易に JSON.stringify を使う
+  const cacheKey = React.useCallback(
+    (fs: number) => {
+      const chaptersJson = JSON.stringify(
+        chapters.map((ch) => ({ title: ch.chapterTitle, contents: ch.chapterContents }))
+      );
+      return `pagerCache:${chaptersJson}:${pageWidth}:${padding}:${fs}`;
+    },
+    [chapters, pageWidth, padding]
+  );
 
   // ──────────────────────────────────────────────────────────
   // 「ページごとの HTML 文字列リスト」を保持する state
@@ -200,60 +121,66 @@ export function Pager({ pageWidth, pageHeight, padding, defaultFontSize, chapter
 
     // すでに ?page がついているならキャッシュ生成は不要
     if (hasPageQuery) {
-      // ページクエリがある＝キャッシュモードなので、キャッシュを localStorage から読むだけ
-      try {
-        const stored = localStorage.getItem(cacheKey);
-        if (stored) {
-          const parsed = JSON.parse(stored) as { pageHTMLs: string[]; pageCount: number };
-          setPageHTMLs(parsed.pageHTMLs);
-          setPageCount(parsed.pageCount);
-        }
-      } catch {
-        // もしパースに失敗したら何もしない（最悪再生成）
+      // キャッシュ取得。なければ全フォント生成＆再取得
+      let cached = getCache(chapters, pageWidth, padding, fontSize);
+      console.log(cached);
+      if (cached) {
+        setPageHTMLs(cached.pageHTMLs);
+        setPageCount(cached.pageCount);
+      } else {
+        console.log("go regen");
+        setIsBuildingCache(true);
       }
       return;
     }
 
-    // ここからは「初回アクセス (hasPageQuery が false)」のときだけ実行
+    // 初回アクセス時に、すべてのフォントサイズでキャッシュ生成
     setIsBuildingCache(true);
-
-    // 1) 測定用コンテナとしてまず DOM を構築し、extractPagesFromRefs を実行
-    if (!innerRef.current) return;
-    const pages = extractPagesFromRefs(paraRefs, chapters, pageWidth, setPageCount);
-    setPageHTMLs(pages);
-
-    // 2) localStorage にキャッシュを保存
-    try {
-      localStorage.setItem(cacheKey, JSON.stringify({ pageHTMLs: pages, pageCount }));
-    } catch {
-      // 保存エラーは無視
-    }
-
-    // 3) キャッシュができたら自動で ?page=1 に遷移
-    router.replace(
-      { pathname: router.pathname, query: { ...router.query, page: 1 } },
-      undefined,
-      { shallow: true }
-    );
   }, [router, hasPageQuery, cacheKey, chapters, pageWidth, padding, pageCount]);
 
-  // jump after font-size change
+  // if (!innerRef.current) return;
+  //     generateAllFontCaches(paraRefs.current, chapters, pageWidth, padding, fontSizeList);
+  //     // 初期フォント用キャッシュを読み込む
+  //     const initialCache = getCache(chapters, pageWidth, padding, fontSize);
+  //     if (initialCache) {
+  //       setPageHTMLs(initialCache.pageHTMLs);
+  //       setPageCount(initialCache.pageCount);
+  //     }
+  //     router.replace(
+  //       { pathname: router.pathname, query: { ...router.query, page: 1 } },
+  //       undefined,
+  //       { shallow: true }
+  //     );
+
+  // ──────────────────────────────────────────────────────────
+  // 実際に生成が必要なタイミングでキャッシュを生成
+  //──────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!pendingKey) return;
-    if (!paraRefs.current['0_title']) return;
-    const baseline = paraRefs.current['0_title'].offsetLeft + paraRefs.current['0_title'].offsetWidth;
-    const el = paraRefs.current[pendingKey];
-    if (el) {
-      const elRight = el.offsetLeft + el.offsetWidth;
-      const newPage = Math.floor((baseline - elRight) / pageWidth) + 1;
-      router.push(
-        { pathname: router.pathname, query: { ...router.query, page: newPage } },
+    // isBuildingCache=true かつ innerRef がマウントされたら実行
+    if (!isBuildingCache || !innerRef.current) return;
+
+    // ページ分割用の hidden コンテナで DOM が揃った状態
+    generateAllFontCaches(paraRefs.current, chapters, pageWidth, padding, fontSizeList);
+
+    // 最終的に必要な fontSize のキャッシュを読み込む
+    const loaded = getCache(chapters, pageWidth, padding, fontSize);
+    if (loaded) {
+      setPageHTMLs(loaded.pageHTMLs);
+      setPageCount(loaded.pageCount);
+    }
+
+    // 初回アクセス時なら /?page=1 にジャンプ
+    if (!hasPageQuery) {
+      router.replace(
+        { pathname: router.pathname, query: { ...router.query, page: 1 } },
         undefined,
         { shallow: true }
       );
     }
-    setPendingKey(null);
-  }, [router, fontSize, pageWidth, pendingKey]);
+
+    // キャッシュ処理が完了したので、測定用コンテナを非表示
+    setIsBuildingCache(false);
+  }, [isBuildingCache, chapters, pageWidth, padding, fontSize, fontSizeList, hasPageQuery, router]);
 
   const goNextAnimated = () => {
     if (isAnimating || pageIndex >= pageCount - 1) return;
@@ -328,27 +255,49 @@ export function Pager({ pageWidth, pageHeight, padding, defaultFontSize, chapter
   };
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    if (paraRefs.current['0_title']) {
-      const baseline = paraRefs.current['0_title'].offsetLeft + paraRefs.current['0_title'].offsetWidth;
-      const entries = Object.entries(paraRefs.current)
-        .filter(([, el]) => el !== null);
-      const firstOnPage = entries
-        .map(([key, el]) => ({ key, right: el!.offsetLeft + el!.offsetWidth }))
-        .filter(item => item.right <= baseline - pageIndex * pageWidth)
-        .sort((a, b) => b.right - a.right)[0];
-      setPendingKey(firstOnPage ? firstOnPage.key : null);
-    }
     const newFontSize = parseInt(e.target.value, 10);
-    router.push(
-      { pathname: router.pathname, query: { ...router.query, fontSize: newFontSize } },
-      undefined,
-      { shallow: true }
-    );
+
+    // (1) 現在ページの先頭 50 文字を「指紋」として取っておく
+    const snippet = pageHTMLs[pageIndex].slice(0, 50);
+    setFingerprint(snippet);
+    // (2) フォントを更新し、キャッシュから読み込み
+    setFontSize(newFontSize);
+
+    // キャッシュから読み込み：pageHTMLs と pageCount を新しいフォント用キャッシュで置き換え
+    let newCache = getCache(chapters, pageWidth, padding, newFontSize);
+    if (!newCache) {
+      generateAllFontCaches(paraRefs.current, chapters, pageWidth, padding, fontSizeList);
+      newCache = getCache(chapters, pageWidth, padding, newFontSize);
+    }
+    if (newCache) {
+      setPageHTMLs(newCache.pageHTMLs);
+      setPageCount(newCache.pageCount);
+    }
   };
+
+  // ──────────────────────────────────────────────────────────
+  // フォント変更後に「指紋（スニペット）」を使って同じ箇所を探す
+  //──────────────────────────────────────────────────────────
+  useLayoutEffect(() => {
+    if (!fingerprint) return;
+    // ページごとの HTML を巡って、fingerprint を含むページを探す
+    const targetPage = pageHTMLs.findIndex((html) =>
+      html.includes(fingerprint)
+    );
+    if (targetPage !== -1) {
+      router.push(
+        { pathname: router.pathname, query: { ...router.query, page: targetPage + 1 } },
+        undefined,
+        { shallow: true }
+      );
+    }
+    // 一度使ったらクリア
+    setFingerprint(null);
+  }, [pageHTMLs, fingerprint, router]);
 
   return (
     <>
-      {(!hasPageQuery || isBuildingCache) && (
+      {(isBuildingCache || !hasPageQuery) && (
         <div
           className='novel-window'
           ref={containerRef}
@@ -436,7 +385,7 @@ export function Pager({ pageWidth, pageHeight, padding, defaultFontSize, chapter
       )}
 
       {/* 2) ?page がある or キャッシュ生成完了後の通常表示 */}
-      {hasPageQuery && pageHTMLs.length > 0 && (
+      {hasPageQuery && !isBuildingCache && pageHTMLs.length > 0 && (
         <div
           className='novel-window'
           ref={containerRef}
@@ -542,7 +491,7 @@ export function Pager({ pageWidth, pageHeight, padding, defaultFontSize, chapter
             zIndex: 2,
           }}>
             <select value={fontSize} onChange={handleSelectChange} onClick={(e) => e.stopPropagation()}>
-              {[12, 14, 16, 18, 20, 22, 24].map((size) => (
+              {fontSizeList.map((size) => (
                 <option key={size} value={size}>
                   {size}px
                 </option>

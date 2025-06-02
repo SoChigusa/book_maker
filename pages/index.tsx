@@ -65,6 +65,7 @@ export default function Novel({ chapters }: NovelProps) {
           pageWidth={408}
           padding={19}
           defaultFontSize={16}
+          fontSizeList={[12, 14, 16, 18, 20, 22, 24]}
           chapters={chapters}
         />
       </div>
