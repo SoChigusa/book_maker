@@ -61,9 +61,9 @@ export default function Novel({ chapters }: NovelProps) {
         }}
       >
         <Pager
-          pageHeight={600}
-          pageWidth={480}
-          paddingX={7}
+          pageHeight={624}
+          pageWidth={408}
+          padding={19}
           defaultFontSize={16}
           chapters={chapters}
         />
