@@ -1,7 +1,7 @@
 import React, { useRef, useState, useLayoutEffect, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Chapter from '@/app/types';
-import { extractPagesFromRefs, generateAllFontCaches, getCache } from '@/utils/pagerCache';
+import { generateAllFontCaches, getCache } from '@/utils/pagerCache';
 
 type PagerProps = {
   pageHeight: number;
@@ -122,13 +122,11 @@ export function Pager({ pageWidth, pageHeight, padding, defaultFontSize, fontSiz
     // すでに ?page がついているならキャッシュ生成は不要
     if (hasPageQuery) {
       // キャッシュ取得。なければ全フォント生成＆再取得
-      let cached = getCache(chapters, pageWidth, padding, fontSize);
-      console.log(cached);
+      const cached = getCache(chapters, pageWidth, padding, fontSize);
       if (cached) {
         setPageHTMLs(cached.pageHTMLs);
         setPageCount(cached.pageCount);
       } else {
-        console.log("go regen");
         setIsBuildingCache(true);
       }
       return;
@@ -136,7 +134,7 @@ export function Pager({ pageWidth, pageHeight, padding, defaultFontSize, fontSiz
 
     // 初回アクセス時に、すべてのフォントサイズでキャッシュ生成
     setIsBuildingCache(true);
-  }, [router, hasPageQuery, cacheKey, chapters, pageWidth, padding, pageCount]);
+  }, [router, hasPageQuery, cacheKey, chapters, fontSize, pageWidth, padding, pageCount]);
 
   // if (!innerRef.current) return;
   //     generateAllFontCaches(paraRefs.current, chapters, pageWidth, padding, fontSizeList);
