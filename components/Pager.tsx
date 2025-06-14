@@ -16,9 +16,7 @@ type PagerProps = {
 
 export function Pager({ pageWidth, pageHeight, padding, defaultFontSize, fontSizeList, chapters }: PagerProps) {
   const router = useRouter();
-  const innerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const paraRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const [pageCount, setPageCount] = useState(1);
   const [hoverZone, setHoverZone] = useState<'left' | 'right' | null>(null);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
@@ -58,7 +56,7 @@ export function Pager({ pageWidth, pageHeight, padding, defaultFontSize, fontSiz
     columnGap: 0,
     WebkitColumnFill: 'auto',
     columnFill: 'auto',
-    // visibility: 'hidden', // ここで非表示にする
+    visibility: 'hidden', // ここで非表示にする
   };
 
   // // padding adjustment
@@ -155,10 +153,10 @@ export function Pager({ pageWidth, pageHeight, padding, defaultFontSize, fontSiz
   //──────────────────────────────────────────────────────────
   useEffect(() => {
     // isBuildingCache=true かつ innerRef がマウントされたら実行
-    if (!isBuildingCache || !innerRef.current) return;
+    if (!isBuildingCache) return;
 
     // ページ分割用の hidden コンテナで DOM が揃った状態
-    generateAllFontCaches(paraRefs.current, chapters, pageWidth, padding, fontSizeList);
+    generateAllFontCaches(measureStyle, chapters, pageHeight, pageWidth, padding, fontSizeList);
 
     // 最終的に必要な fontSize のキャッシュを読み込む
     const loaded = getCache(chapters, pageWidth, padding, fontSize);
@@ -178,7 +176,7 @@ export function Pager({ pageWidth, pageHeight, padding, defaultFontSize, fontSiz
 
     // キャッシュ処理が完了したので、測定用コンテナを非表示
     setIsBuildingCache(false);
-  }, [isBuildingCache, chapters, pageWidth, padding, fontSize, fontSizeList, hasPageQuery, router]);
+  }, [isBuildingCache, chapters, pageWidth, padding, fontSize, fontSizeList, hasPageQuery, router, measureStyle, pageHeight]);
 
   const goNextAnimated = () => {
     if (isAnimating || pageIndex >= pageCount - 1) return;
@@ -264,7 +262,7 @@ export function Pager({ pageWidth, pageHeight, padding, defaultFontSize, fontSiz
     // キャッシュから読み込み：pageHTMLs と pageCount を新しいフォント用キャッシュで置き換え
     let newCache = getCache(chapters, pageWidth, padding, newFontSize);
     if (!newCache) {
-      generateAllFontCaches(paraRefs.current, chapters, pageWidth, padding, fontSizeList);
+      generateAllFontCaches(measureStyle, chapters, pageHeight, pageWidth, padding, fontSizeList);
       newCache = getCache(chapters, pageWidth, padding, newFontSize);
     }
     if (newCache) {
@@ -295,93 +293,6 @@ export function Pager({ pageWidth, pageHeight, padding, defaultFontSize, fontSiz
 
   return (
     <>
-      {(isBuildingCache || !hasPageQuery) && (
-        <div
-          className='novel-window'
-          ref={containerRef}
-          style={measureStyle}
-        >
-          <div style={{
-            position: 'relative',
-            width: pageWidth + 2 * padding,
-            height: pageHeight + 2 * padding,
-            overflow: 'hidden',
-            padding: `${padding}px ${padding}px`,
-            zIndex: 0,
-          }}>
-            <div
-              ref={innerRef}
-              style={{
-                height: pageHeight,
-                WebkitColumnWidth: pageWidth,
-                columnWidth: pageWidth,
-                columnGap: 0,
-                WebkitColumnFill: 'auto',
-                columnFill: 'auto',
-              }}
-            >
-              {chapters.map((chapter, idx) => {
-                const keyNameTitle = `${idx}_title`;
-                return (
-                  <div key={idx} style={{ visibility: 'hidden' }}>
-                    <div
-                      ref={(el) => {
-                        paraRefs.current[keyNameTitle] = el;
-                      }}
-                    >
-                      <h4>{chapter.chapterTitle}</h4>
-                    </div>
-                    {chapter.chapterContents.flatMap((content, i) =>
-                      [
-                        ...content.split('\n').map((line, index) => {
-                          const keyName = `${idx}_${i}_${index}`;
-                          if (line == '') {
-                            return (
-                              <div
-                                key={keyName}
-                                ref={(el) => {
-                                  paraRefs.current[keyName] = el;
-                                }}
-                              ><br /></div>
-                            );
-                          } else {
-                            return (
-                              <div
-                                key={keyName}
-                                ref={(el) => {
-                                  paraRefs.current[keyName] = el;
-                                }}
-                              >
-                                <p
-                                  className={/^[「（]/.test(line.trim()) ? 'conversation' : 'descriptive'}
-                                  dangerouslySetInnerHTML={{ __html: line }}
-                                />
-                              </div>
-                            );
-                          }
-                        }),
-                        i < chapter.chapterContents.length - 1 && (
-                          <div
-                            key={`${idx}_${i}_sep`}
-                            ref={(el) => {
-                              paraRefs.current[`${idx}_${i}_sep`] = el;
-                            }}
-                          >
-                            <p style={{ textAlign: 'center', paddingRight: '1em', paddingLeft: '1em' }}>
-                              ＊＊＊
-                            </p>
-                          </div>
-                        ),
-                      ].filter(Boolean)
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* 2) ?page がある or キャッシュ生成完了後の通常表示 */}
       {hasPageQuery && !isBuildingCache && pageHTMLs.length > 0 && (
         <div

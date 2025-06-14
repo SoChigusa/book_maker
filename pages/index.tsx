@@ -16,8 +16,8 @@ export const getStaticProps = async (): Promise<{
       try {
         const raw = fs.readFileSync(filePath, 'utf-8');
         const sanitized = raw
-          // .replace(/…/g, '︙')
-          // .replace(/\.{3}/g, '︙')
+          .replace(/…/g, '︙')
+          .replace(/\.{3}/g, '︙')
           .replace(/――/g, '\u2500\u2500')
           .replace(/“/g, '\u301D')
           .replace(/”/g, '\u301F')
